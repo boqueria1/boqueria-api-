@@ -5,14 +5,13 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # --- 設定変数 ---
-# GASウェブアプリのURLを環境変数から取得
-# 環境変数 'GAS_WEB_APP_URL' が設定されていない場合、エラーログを出力し、デフォルト値（空文字列）を使用します。
-# 実際の運用では、環境変数の設定漏れがないことを確実にしてください。
-GAS_WEB_APP_URL = os.environ.get("GAS_WEB_APP_URL", "")
+# お客様のGASウェブアプリの新しいURL
+# 最新のGAS URLをここに直接設定します。
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMT_ugJ2P32MwxOTjlMfrfbsQ1u0co4dAptXTpDS6eupjhjBT1ju2Xwxp4yNQ14gCiyw/exec"
 
 # GASコードのEXPECTED_INTERNAL_API_KEYと一致する秘密のキー
-# 環境変数 'INTERNAL_API_KEY' が設定されていない場合、エラーログを出力し、デフォルト値（空文字列）を使用します。
-INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY", "")
+# APIキーをここに直接設定します。
+INTERNAL_API_KEY = "QUIZ_APP_INTERNAL_API_SECRET_2025"
 
 INTERNAL_API_KEY_HEADER_NAME = "X-Internal-API-Key"
 
@@ -22,13 +21,15 @@ def send_to_gas(json_payload):
     GASウェブアプリにデータを転送し、レスポンスを取得する
     """
     # GAS_WEB_APP_URLが設定されているかチェック
+    # （コードに直接記述されているため、通常は空になることはありませんが、念のため）
     if not GAS_WEB_APP_URL:
-        app.logger.error("GAS_WEB_APP_URL is not set in environment variables.")
+        app.logger.error("GAS_WEB_APP_URL is not set in environment variables (or hardcoded).")
         return {"status": "error", "message": "GASウェブアプリのURLが設定されていません。"}
     
     # INTERNAL_API_KEYが設定されているかチェック
+    # （コードに直接記述されているため、通常は空になることはありませんが、念のため）
     if not INTERNAL_API_KEY:
-        app.logger.error("INTERNAL_API_KEY is not set in environment variables.")
+        app.logger.error("INTERNAL_API_KEY is not set in environment variables (or hardcoded).")
         return {"status": "error", "message": "APIキーが設定されていません。"}
 
     try:

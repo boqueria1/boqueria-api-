@@ -19,7 +19,8 @@ def send_to_gas(json_payload):
     """
     try:
         headers = {'Content-Type': 'application/json'}
-        headers[INTERNAL_API_KEY_HEADER_NAME.lower()] = INTERNAL_API_KEY
+        # ここでカスタムヘッダーを追加
+        headers[INTERNAL_API_KEY_HEADER_NAME] = INTERNAL_API_KEY # ヘッダー名はそのままの大文字小文字で渡す
 
         # GASへのリクエスト
         gas_response = requests.post(GAS_WEB_APP_URL, json=json_payload, headers=headers, timeout=30)
@@ -34,7 +35,8 @@ def send_to_gas(json_payload):
         return {"status": "error", "message": f"GASからのレスポンス解析エラー: {e}"}
 
 # --- APIエンドポイント ---
-@app.route('/', methods=['POST'])
+# GPTスキーマのエンドポイント名に合わせてパスを修正
+@app.route('/processQuizAction', methods=['POST']) 
 def handle_request():
     """
     GPTsからのPOSTリクエストを受け取り、GASに転送して結果を返すメインエンドポイント

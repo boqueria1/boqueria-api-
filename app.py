@@ -1,66 +1,59 @@
 import os
-from flask import Flask, request, jsonify
 import requests
-import json
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# 環境変数からAPIキーを取得
-# Renderデプロイ時には環境変数が優先されます
-INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'your_gpts_internal_api_key')
+# --- 設定変数 ---
+# お客様のGASウェブアプリの新しいURL
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwB6BmqqN9Wpa8CrjAjrC0rBb3yFCggQ3GyQfLHn1w9ne3F52QRM3rnaHAK-J-Q2IpEVw/exec"
 
-# 更新されたGAS WebアプリのURLを設定
-# ここに新しいGASウェブアプリのデプロイURLを正確に貼り付けてください
-GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwycNDU4v_VLr9mfADHGIbygKmFpkgBYVIjn_F_bgTZtnWneCGbCohLkLnuCMfPclUWzg/exec'
+# GASコードのEXPECTED_INTERNAL_API_KEYと一致する秘密のキー
+INTERNAL_API_KEY = "QUIZ_APP_INTERNAL_API_SECRET_2025" 
+INTERNAL_API_KEY_HEADER_NAME = "X-Internal-API-Key"
 
-@app.route('/quiz-api', methods=['POST'])
-def handle_quiz_api():
-    # GPTsから送られてくるx-api-keyを検証
-    client_internal_api_key = request.headers.get('x-api-key')
-    if not client_internal_api_key or client_internal_api_key != INTERNAL_API_KEY:
-        return jsonify({
-            "status": "error",
-            "message": "Authentication failed for intermediate API. Invalid or missing x-api-key."
-        }), 401
-
+# --- ヘルパー関数 ---
+def send_to_gas(json_payload):
+    """
+    GASウェブアプリにデータを転送し、レスポンスを取得する
+    """
     try:
-        # GPTsからのリクエストボディを取得
-        request_data = request.json
-        if not request_data:
-            return jsonify({
-                "status": "error",
-                "message": "Request body is empty or not valid JSON."
-            }), 400
+        headers = {'Content-Type': 'application/json'}
+        headers[INTERNAL_API_KEY_HEADER_NAME.lower()] = INTERNAL_API_KEY
 
-        # GAS Web Appへリクエストを転送
-        # headersは必要に応じて追加・調整してください
-        gas_response = requests.post(GAS_WEB_APP_URL, json=request_data)
+        # GASへのリクエスト
+        gas_response = requests.post(GAS_WEB_APP_URL, json=json_payload, headers=headers, timeout=30)
         gas_response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
-
-        # GASからのレスポンスをそのままGPTsに返す
-        return jsonify(gas_response.json()), gas_response.status_code
-
+        
+        return gas_response.json()
     except requests.exceptions.RequestException as e:
-        # requestsライブラリのエラー（ネットワーク問題、GAS側のエラーなど）
-        return jsonify({
-            "status": "error",
-            "message": f"Error communicating with GAS Web App: {str(e)}"
-        }), 500
-    except json.JSONDecodeError:
-        # GASからのレスポンスがJSON形式でない場合
-        return jsonify({
-            "status": "error",
-            "message": "Failed to decode JSON response from GAS Web App."
-        }), 500
-    except Exception as e:
-        # その他の予期せぬエラー
-        return jsonify({
-            "status": "error",
-            "message": f"An unexpected error occurred in intermediate API: {str(e)}"
-        }), 500
+        app.logger.error(f"Error communicating with GAS: {e}")
+        return {"status": "error", "message": f"GASとの通信エラー: {e}"}
+    except ValueError as e:
+        app.logger.error(f"Error parsing GAS response JSON: {e}, Response text: {gas_response.text if 'gas_response' in locals() else 'N/A'}")
+        return {"status": "error", "message": f"GASからのレスポンス解析エラー: {e}"}
 
+# --- APIエンドポイント ---
+@app.route('/', methods=['POST'])
+def handle_request():
+    """
+    GPTsからのPOSTリクエストを受け取り、GASに転送して結果を返すメインエンドポイント
+    """
+    if not request.is_json:
+        return jsonify({"status": "error", "message": "Request must be JSON"}), 400
+
+    gpt_request_payload = request.get_json()
+    app.logger.info(f"Received request from GPTs: {gpt_request_payload}")
+
+    # GASにリクエストを転送
+    gas_result = send_to_gas(gpt_request_payload)
+    
+    app.logger.info(f"Response from GAS: {gas_result}")
+    
+    return jsonify(gas_result), 200
+
+# --- アプリケーションの実行 ---
 if __name__ == '__main__':
-    # 開発環境での実行用 (Renderデプロイ時は不要)
-    # ポートはRenderが自動で割り当てるため、os.environ.get('PORT')を使用
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    # Flask開発サーバーはデバッグ用途。本番環境ではGunicornなどを使用
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)

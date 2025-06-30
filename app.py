@@ -24,8 +24,8 @@ def handle_quiz_api():
         request_data = request.json
 
         # Google Apps Script Web Appへ転送するためのヘッダーを設定
-        # Apps Script側のAPI_KEY (123) と一致させる必要があります
-        gas_headers = {'Content-Type': 'application/json', 'x-api-key': '123'} # <--- この行です
+        # ここで 'x-api-key': '123' を削除しました
+        gas_headers = {'Content-Type': 'application/json'}
 
         # Google Apps Script Web AppへPOSTリクエストを送信
         # タイムアウトは30秒に設定

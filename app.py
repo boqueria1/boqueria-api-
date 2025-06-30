@@ -1,14 +1,15 @@
 import os
 from flask import Flask, request, jsonify
 import requests
-import json # ★追加または確認
+import json # ★追加または確認済み
 
 app = Flask(__name__)
 
 # 環境変数からAPIキーとGAS WebアプリのURLを取得
 # デフォルト値は開発用のため、Renderデプロイ時には環境変数が優先されます
+# 提供いただいたURLに更新済み
 INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'your_gpts_internal_api_key')
-GAS_WEB_APP_URL = os.environ.get('GAS_WEB_APP_URL', 'https://script.google.com/macros/s/xxxxxxxxxxxxxxxxxxx/exec')
+GAS_WEB_APP_URL = os.environ.get('GAS_WEB_APP_URL', 'https://script.google.com/macros/s/AKfycbzHoHVDVafFlRVxruP4hn571NzPy3S_seYH2yfWqA0LJCFQC1RePy4ZllrHLIC7xXNNEw/exec') # ★URLを更新
 
 @app.route('/quiz-api', methods=['POST'])
 def handle_quiz_api():
@@ -26,11 +27,11 @@ def handle_quiz_api():
 
         # Google Apps Script Web Appへ転送するためのヘッダーを設定
         # Content-Type を text/plain に変更し、data=json.dumps(request_data) で文字列として送信する
-        gas_headers = {'Content-Type': 'text/plain'} # ★ここを変更
+        gas_headers = {'Content-Type': 'text/plain'} # ★ここを変更済み
 
         # Google Apps Script Web AppへPOSTリクエストを送信
         # json=request_data ではなく data=json.dumps(request_data) を使う
-        gas_response = requests.post(GAS_WEB_APP_URL, data=json.dumps(request_data), headers=gas_headers, timeout=30) # ★ここを変更
+        gas_response = requests.post(GAS_WEB_APP_URL, data=json.dumps(request_data), headers=gas_headers, timeout=30) # ★ここを変更済み
         
         # HTTPステータスコードが2xx以外の場合、例外を発生させる
         gas_response.raise_for_status()

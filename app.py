@@ -1,6 +1,7 @@
 import os
 from flask import Flask, request, jsonify
 import requests
+import json # ★追加または確認
 
 app = Flask(__name__)
 
@@ -24,12 +25,12 @@ def handle_quiz_api():
         request_data = request.json
 
         # Google Apps Script Web Appへ転送するためのヘッダーを設定
-        # ここで 'x-api-key': '123' を削除しました
-        gas_headers = {'Content-Type': 'application/json'}
+        # Content-Type を text/plain に変更し、data=json.dumps(request_data) で文字列として送信する
+        gas_headers = {'Content-Type': 'text/plain'} # ★ここを変更
 
         # Google Apps Script Web AppへPOSTリクエストを送信
-        # タイムアウトは30秒に設定
-        gas_response = requests.post(GAS_WEB_APP_URL, json=request_data, headers=gas_headers, timeout=30)
+        # json=request_data ではなく data=json.dumps(request_data) を使う
+        gas_response = requests.post(GAS_WEB_APP_URL, data=json.dumps(request_data), headers=gas_headers, timeout=30) # ★ここを変更
         
         # HTTPステータスコードが2xx以外の場合、例外を発生させる
         gas_response.raise_for_status()

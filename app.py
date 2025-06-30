@@ -6,7 +6,7 @@ app = Flask(__name__)
 
 # --- 設定変数 ---
 # お客様のGASウェブアプリの新しいURL
-GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwB6BmqqN9Wpa8CrjAjrC0rBb3yFCggQ3GyQfLHn1w9ne3F52QRM3rnaHAK-J-Q2IpEVw/exec"
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzmYcF1l_URAh1s0SYWSe9cJDaMhiq3BwuB99fxk92cC_E_zEko2IF7CmOSQCh8_oQPfQ/exec"
 
 # GASコードのEXPECTED_INTERNAL_API_KEYと一致する秘密のキー
 INTERNAL_API_KEY = "QUIZ_APP_INTERNAL_API_SECRET_2025" 

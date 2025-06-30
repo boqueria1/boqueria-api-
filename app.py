@@ -7,7 +7,7 @@ app = Flask(__name__)
 # --- 設定変数 ---
 # お客様のGASウェブアプリの新しいURL
 # 最新のGAS URLをここに直接設定します。
-GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMT_ugJ2P32MwxOTjlMfrfbsQ1u0co4dAptXTpDS6eupjhjBT1ju2Xwxp4yNQ14gCiyw/exec"
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfkmlPxel0SQBQDuBYDSpAneV_PnL7yyk1HDx3J9FLtXq7dwKUR6VthZZy3Mgd8OL81Q/exec" # <-- このURLが新しいものに更新されました
 
 # GASコードのEXPECTED_INTERNAL_API_KEYと一致する秘密のキー
 # APIキーをここに直接設定します。

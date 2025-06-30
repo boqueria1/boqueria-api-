@@ -9,7 +9,7 @@ app = Flask(__name__)
 # デフォルト値は開発用のため、Renderデプロイ時には環境変数が優先されます
 # 今回提供いただいた最新のGAS WebアプリURLを直接埋め込みました
 INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'your_gpts_internal_api_key')
-GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxQUC3LUgA4Xu8CDiezxf33X9bS7THpzW8gpNfKraBTU1YlmPjrb5dJ2gontrIbVqkFpg/exec' 
+GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxI2ItOVWSF7DKGnTEjpW-GklSo_DhkLif1P1NXMvwDykGywcgcdJzHMaCd5mUZkC6YYw/exec' 
 
 @app.route('/quiz-api', methods=['POST'])
 def handle_quiz_api():

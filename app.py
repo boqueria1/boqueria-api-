@@ -7,7 +7,7 @@ app = Flask(__name__)
 # --- 設定変数 ---
 # お客様のGASウェブアプリの新しいURL
 # 最新のGAS URLをここに直接設定します。
-GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfkmlPxel0SQBQDuBYDSpAneV_PnL7yyk1HDx3J9FLtXq7dwKUR6VthZZy3Mgd8OL81Q/exec" # <-- このURLが新しいものに更新されました
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzfkmlPxel0SQBQDuBYDSpAneV_PnL7yyk1HDx3J9FLtXq7dwKUR6VthZZy3Mgd8OL81Q/exec"
 
 # GASコードのEXPECTED_INTERNAL_API_KEYと一致する秘密のキー
 # APIキーをここに直接設定します。
@@ -35,6 +35,10 @@ def send_to_gas(json_payload):
     try:
         headers = {'Content-Type': 'application/json'}
         headers[INTERNAL_API_KEY_HEADER_NAME] = INTERNAL_API_KEY
+        
+        # --- ここから追加するデバッグログ ---
+        app.logger.info(f"DEBUG: Headers being sent to GAS: {headers}") 
+        # --- ここまで追加 ---
 
         app.logger.info(f"Attempting to send request to GAS URL: {GAS_WEB_APP_URL}")
         app.logger.info(f"Request payload: {json_payload}")

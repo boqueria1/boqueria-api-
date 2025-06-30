@@ -7,10 +7,9 @@ app = Flask(__name__)
 
 # 環境変数からAPIキーとGAS WebアプリのURLを取得
 # デフォルト値は開発用のため、Renderデプロイ時には環境変数が優先されます
-# 提供いただいたURLに更新済み
+# 今回提供いただいた最新のGAS WebアプリURLを直接埋め込みました
 INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'your_gpts_internal_api_key')
-# ★★★ 最新のGAS WebアプリのURLに更新済み ★★★
-GAS_WEB_APP_URL = os.environ.get('GAS_WEB_APP_URL', 'https://script.google.com/macros/s/AKfycbz68HMbQ1My2_cbruWCd0M4tGkYOSxC0VugBWPgFzYxXsDIZjg40XpSzfQKYBkBP1mB4g/exec') 
+GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxQUC3LUgA4Xu8CDiezxf33X9bS7THpzW8gpNfKraBTU1YlmPjrb5dJ2gontrIbVqkFpg/exec' 
 
 @app.route('/quiz-api', methods=['POST'])
 def handle_quiz_api():
@@ -27,14 +26,12 @@ def handle_quiz_api():
         request_data = request.json
         
         # Google Apps Script Web AppへPOSTリクエストを送信
-        # Content-Type: application/json で json= パラメータを使用
         gas_response = requests.post(GAS_WEB_APP_URL, json=request_data, timeout=30)
         
         # HTTPステータスコードが2xx以外の場合、例外を発生させる
         gas_response.raise_for_status()
 
         # Apps Scriptからの応答をJSONとしてパースして返す
-        # GASからのレスポンスがJSON形式でない場合のハンドリングを強化
         try:
             return jsonify(gas_response.json()), gas_response.status_code
         except json.JSONDecodeError:

@@ -5,11 +5,13 @@ import json
 
 app = Flask(__name__)
 
-# 環境変数からAPIキーとGAS WebアプリのURLを取得
-# デフォルト値は開発用のため、Renderデプロイ時には環境変数が優先されます
-# 今回提供いただいた最新のGAS WebアプリURLを直接埋め込みました
+# 環境変数からAPIキーを取得
+# Renderデプロイ時には環境変数が優先されます
 INTERNAL_API_KEY = os.environ.get('INTERNAL_API_KEY', 'your_gpts_internal_api_key')
-GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbybHDbAJ7l0YYyvcFU84REVluaZfRZsxMRNMycocnCU2osK5xHsBX-bnRoZqaD0By3E/exec' 
+
+# 更新されたGAS WebアプリのURLを設定
+# ここに新しいGASウェブアプリのデプロイURLを正確に貼り付けてください
+GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwycNDU4v_VLr9mfADHGIbygKmFpkgBYVIjn_F_bgTZtnWneCGbCohLkLnuCMfPclUWzg/exec'
 
 @app.route('/quiz-api', methods=['POST'])
 def handle_quiz_api():
@@ -24,55 +26,41 @@ def handle_quiz_api():
     try:
         # GPTsからのリクエストボディを取得
         request_data = request.json
-        
-        # Google Apps Script Web AppへPOSTリクエストを送信
-        gas_response = requests.post(GAS_WEB_APP_URL, json=request_data, timeout=30)
-        
-        # HTTPステータスコードが2xx以外の場合、例外を発生させる
-        gas_response.raise_for_status()
-
-        # Apps Scriptからの応答をJSONとしてパースして返す
-        try:
-            return jsonify(gas_response.json()), gas_response.status_code
-        except json.JSONDecodeError:
-            # GASが有効なJSONを返さなかった場合
-            print(f"GAS responded with non-JSON content: {gas_response.text}")
+        if not request_data:
             return jsonify({
                 "status": "error",
-                "message": "GAS response was not valid JSON.",
-                "gas_response_text": gas_response.text # デバッグ用にGASの生レスポンスを含める
-            }), 500 # 500 Internal Server Error として返すのが適切かもしれません
+                "message": "Request body is empty or not valid JSON."
+            }), 400
 
-    except requests.exceptions.Timeout:
-        # タイムアウトエラーのハンドリング
-        return jsonify({
-            "status": "error",
-            "message": "Timeout connecting to Google Apps Script Web App."
-        })
+        # GAS Web Appへリクエストを転送
+        # headersは必要に応じて追加・調整してください
+        gas_response = requests.post(GAS_WEB_APP_URL, json=request_data)
+        gas_response.raise_for_status() # HTTPエラーが発生した場合に例外を発生させる
+
+        # GASからのレスポンスをそのままGPTsに返す
+        return jsonify(gas_response.json()), gas_response.status_code
+
     except requests.exceptions.RequestException as e:
-        # リクエスト関連のその他のエラーハンドリング（例：ネットワークエラー、GASが5xxを返したなど）
-        error_message = f"Failed to connect to Google Apps Script Web App: {e}"
-        gas_response_text = "No response text available"
-        if 'gas_response' in locals():
-            gas_response_text = gas_response.text
-        
-        print(f"RequestException caught: {e}")
-        print(f"GAS Response content: {gas_response_text}")
-
+        # requestsライブラリのエラー（ネットワーク問題、GAS側のエラーなど）
         return jsonify({
             "status": "error",
-            "message": error_message,
-            "gas_response_text": gas_response_text
-        }), 500 # 適切なステータスコードで返す
-
+            "message": f"Error communicating with GAS Web App: {str(e)}"
+        }), 500
+    except json.JSONDecodeError:
+        # GASからのレスポンスがJSON形式でない場合
+        return jsonify({
+            "status": "error",
+            "message": "Failed to decode JSON response from GAS Web App."
+        }), 500
     except Exception as e:
-        # その他の予期せぬエラーハンドリング
-        print(f"An unexpected error occurred in intermediate API: {e}")
+        # その他の予期せぬエラー
         return jsonify({
             "status": "error",
-            "message": f"An unexpected error occurred in intermediate API: {e}"
-        }), 500 # 適切なステータスコードで返す
+            "message": f"An unexpected error occurred in intermediate API: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
-    # ローカル開発用の設定 (Renderデプロイ時には使用されません)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # 開発環境での実行用 (Renderデプロイ時は不要)
+    # ポートはRenderが自動で割り当てるため、os.environ.get('PORT')を使用
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)

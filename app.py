@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # --- 設定変数（Renderに登録済の値をそのまま使用） ---
-GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzV_YNiM7ToJI6ucWpQ5S6NBrqd9PHDWB4tcHzEJixNof_OBPHv-nqvldl8GqxE5ISH/exec"
+GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxau6hdExq8FiyVaILiBKOBhRtjre2gD8hQMPplsFtL-KmOjhMcbZW_T_O__ptkAGg3/exec"
 INTERNAL_API_KEY = "QUIZ_APP_INTERNAL_API_SECRET_2025"
 INTERNAL_API_KEY_HEADER_NAME = "X-Internal-API-Key"
 

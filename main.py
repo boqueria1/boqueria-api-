@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
@@ -13,7 +12,7 @@ app = FastAPI()
 # Google Sheets 認証情報を環境変数から読み込む
 gc = None
 # ★★ 重要: あなたのスプレッドシートIDに置き換えてください ★★
-SPREADSHEET_ID = "1ZriaRf5UAzzz8q4biKcfr0MxCkOkzf33GyQLCEKngnA" 
+SPREADSHEET_ID = "1ZriaRf5UAzzz8q4biKcfr0MxCkOkzf33GyQLCEKngnA" # あなたのスプレッドシートID
 
 try:
     base64_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_BASE64")
@@ -31,7 +30,7 @@ try:
 
 except Exception as e:
     print(f"Google Sheets APIの初期化エラー: {e}")
-    spreadsheet = None 
+    spreadsheet = None
 
 # スプレッドシートのカラムインデックス定義（0から始まる）
 # GASの定義と完全に一致させました
@@ -55,18 +54,6 @@ COL_CONVERSATION_EXAMPLE = 14 # O列 (会話例)
 # --- インメモリセッション管理 ---
 # 注意: これはサーバーが再起動すると失われる一時的なデータです
 user_sessions: Dict[str, Dict] = {}
-
-# セッションデータの型定義 (Pydanticモデルではないが、構造を明確化)
-# セッションは辞書として保存される
-# {
-#   "current_level": "Beginner",
-#   "quiz_order": [{"quiz_id": "Q001", "row_index": 1}, ...], # スプレッドシートの行インデックス
-#   "current_quiz_index": 0,
-#   "completed_levels": ["Beginner", ...],
-#   "is_exam_mode": False,
-#   "exam_score": 0,
-#   "total_exam_questions": 0
-# }
 
 # --- ヘルパー関数群 ---
 
@@ -109,7 +96,7 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
 
     all_choices_for_display = correct_answers + dummy_choices
     unique_choices = list(dict.fromkeys(all_choices_for_display)) 
-    random.shuffle(unique_choices) 
+    random.shuffle(unique_choices) # 選択肢のシャッフル
 
     return {
         "category1": category1,
@@ -117,7 +104,7 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
         "question_id": question_id,
         "question_type": question_type,
         "question_content": question_content,
-        "choices": unique_choices,
+        "choices": unique_choices, # GPTに渡す選択肢
         "correct_answers": correct_answers,
         "explanation": explanation,
         "conversation_example": conversation_example,
@@ -126,21 +113,10 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
     }
 
 def _get_all_category_names() -> List[str]:
-    """全シートからユニークなカテゴリ1の名前を取得する"""
-    # 現状は "Beginner", "Intermediate", "Advanced", "Drink_recipe" を利用可能なレベルとして定義
-    # 将来的には、全シートを読み込んでCOL_CATEGORY1からユニークなカテゴリ名を収集することも可能
-    # しかし、現行の Instructions ではシート名をレベルとして扱っているため、シート名リストを返す
-    # GASのgetCategoryListでは QUIZ_SHEET_NAME からカテゴリを抽出していたので、それに合わせる
-    # ここでは、固定のシート名「Beginner」からカテゴリリストを取得します。
-    # GPTsのInstructionsには"Beginner", "Intermediate", "Advanced", "Drink_recipe"
-    # がレベルとして記載されているので、ここはそれに合わせるべきか、あるいは全シート名を返すか悩ましい。
-    # 一旦、GASのgetCategoryListに合わせ、QUIZ_SHEET_NAME（今回はBeginner固定ではないので、最初のシートのカテゴリとする）
-    # からカテゴリを取得するように変更します。しかし、それでは他のレベルシートのカテゴリが取れない。
-    # Instructionsに合わせて、ここではシート名をカテゴリとして扱うことにします。
-    
-    # 実際のスプレッドシートにあるシート名を返すべきだが、今回はGPTsのInstructionsと合わせる
-    # "概要" シートはクイズデータを含まない可能性があるので除外
-    return ["Beginner", "Intermediate", "Advanced", "Drink_recipe"]
+    """定義されたトレーニングレベルの順序を返す"""
+    # このリストの順序がトレーニングの進行順序となる
+    # GPTsのInstructionsで想定されているレベルの順序に合わせる
+    return ["Beginner", "Intermediate", "Advanced", "Drink_recipe"] # ★修正済み★
 
 
 # --- FastAPI エンドポイント ---
@@ -185,34 +161,66 @@ async def start_training(payload: StartTrainingPayload):
     if target_category: # 特定のカテゴリからの開始/復習
         level_to_start = target_category # GPTsのInstructionsではシート名がレベル
     else: # カテゴリ指定なしの場合 (一番最初のカテゴリから開始)
-        all_levels = _get_all_category_names() # シート名リスト
+        all_levels = _get_all_category_names() # シート名リスト (修正1で定義された順序)
         if not all_levels:
             raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
-        level_to_start = sorted(all_levels)[0] # アルファベット順で最初のシート
+        level_to_start = all_levels[0] # ★修正済み★ アルファベット順ソートではなく、定義された順序の最初のシート
     
     # 指定されたレベルの設問データを読み込み
     questions_data_raw = _get_spreadsheet_data(level_to_start)
     if not questions_data_raw:
         raise HTTPException(status_code=404, detail=f"選択されたカテゴリ/レベル「{level_to_start}」に設問がありません。")
 
-    # セッションに問題リストと出題順をセット
     session["current_level"] = level_to_start
-    session["quiz_order"] = []
-    # 各問題にスプレッドシートの行インデックスを付与して保存 (後で元のデータを参照するため)
-    # questions_data_raw はヘッダーを除いたデータなので、元のスプレッドシートの行インデックスは +1 される
-    for idx, row in enumerate(questions_data_raw):
-        if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip(): # 設問IDが存在するもののみ対象
-             session["quiz_order"].append({
-                "quiz_id": row[COL_QUIZ_ID].strip(),
-                "original_row_index": idx # questions_data_raw 内でのインデックス (0から始まる)
-            })
     
-    # 出題順序をシャッフル
-    random.shuffle(session["quiz_order"])
+    # ★★★ ここからシャッフルロジックの変更（修正2）★★★
+    # カテゴリ1でグループ化し、カテゴリ2をシャッフル
+    grouped_by_category1: Dict[str, Dict[str, List[Dict]]] = {}
+    for idx, row in enumerate(questions_data_raw):
+        # 必須カラムが存在するかチェック
+        if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip() and \
+           len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
+           len(row) > COL_CATEGORY2 and row[COL_CATEGORY2].strip():
+            
+            cat1 = row[COL_CATEGORY1].strip()
+            cat2 = row[COL_CATEGORY2].strip()
+            quiz_id = row[COL_QUIZ_ID].strip()
+            
+            if cat1 not in grouped_by_category1:
+                grouped_by_category1[cat1] = {}
+            if cat2 not in grouped_by_category1[cat1]:
+                grouped_by_category1[cat1][cat2] = []
+            
+            grouped_by_category1[cat1][cat2].append({
+                "quiz_id": quiz_id,
+                "original_row_index": idx
+            })
+
+    # カテゴリ1のキーを抽出して、元のスプレッドシートの順序を維持
+    # (COL_CATEGORY1でソートされていると仮定し、重複を除いて順序を保持)
+    sorted_category1_keys = []
+    for row in questions_data_raw:
+        if len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
+           row[COL_CATEGORY1].strip() not in sorted_category1_keys:
+            sorted_category1_keys.append(row[COL_CATEGORY1].strip())
+
+    final_quiz_order = []
+    for cat1 in sorted_category1_keys: # カテゴリ1は順序を維持
+        if cat1 in grouped_by_category1:
+            category2_keys = list(grouped_by_category1[cat1].keys())
+            random.shuffle(category2_keys) # カテゴリ2をシャッフル
+            
+            for cat2 in category2_keys: # シャッフルされたカテゴリ2の順に
+                # 各カテゴリ2内の設問もシャッフル (任意: 今回は含めます)
+                current_group_quizzes = grouped_by_category1[cat1][cat2]
+                random.shuffle(current_group_quizzes) # 小項目内もシャッフル
+                final_quiz_order.extend(current_group_quizzes)
+
+    session["quiz_order"] = final_quiz_order # ★修正済み★
     session["current_quiz_index"] = -1 # 最初の問題の前に設定
 
     user_sessions[user_name] = session
-    print(f"User {user_name} session started/reset for level: {level_to_start}")
+    print(f"User {user_name} session started/reset for level: {level_to_start}. Quiz order generated based on Category1 & Category2 shuffle.")
     
     return {"status": "success", "message": f"トレーニングを開始します。現在のカテゴリ: {level_to_start}"}
 
@@ -241,12 +249,12 @@ async def get_question(payload: GetQuestionPayload):
         if current_level and current_level not in session["completed_levels"]:
             session["completed_levels"].append(current_level)
 
-        all_levels_sorted = sorted(_get_all_category_names())
-        current_level_idx = all_levels_sorted.index(current_level) if current_level in all_levels_sorted else -1
+        all_levels = _get_all_category_names() # ★修正3: sorted() を削除★
+        current_level_idx = all_levels.index(current_level) if current_level in all_levels else -1
 
-        if current_level_idx < len(all_levels_sorted) - 1:
+        if current_level_idx < len(all_levels) - 1: # ★修正3: len(all_levels_sorted) を len(all_levels) に変更★
             # 次のカテゴリがある場合
-            next_level = all_levels_sorted[current_level_idx + 1]
+            next_level = all_levels[current_level_idx + 1] # ★修正3: all_levels_sorted を all_levels に変更★
             
             # 次のレベルの設問データを読み込み
             next_questions_data_raw = _get_spreadsheet_data(next_level)
@@ -256,14 +264,46 @@ async def get_question(payload: GetQuestionPayload):
                 raise HTTPException(status_code=404, detail=f"次のカテゴリ「{next_level}」には設問がありません。")
 
             session["current_level"] = next_level
-            session["quiz_order"] = []
+            
+            # ★★★ 次のカテゴリの quiz_order 生成にもシャッフルロジックを適用 ★★★
+            grouped_by_category1_next: Dict[str, Dict[str, List[Dict]]] = {}
             for idx, row in enumerate(next_questions_data_raw):
-                if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip():
-                    session["quiz_order"].append({
-                        "quiz_id": row[COL_QUIZ_ID].strip(),
+                if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip() and \
+                   len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
+                   len(row) > COL_CATEGORY2 and row[COL_CATEGORY2].strip():
+                    
+                    cat1 = row[COL_CATEGORY1].strip()
+                    cat2 = row[COL_CATEGORY2].strip()
+                    quiz_id = row[COL_QUIZ_ID].strip()
+                    
+                    if cat1 not in grouped_by_category1_next:
+                        grouped_by_category1_next[cat1] = {}
+                    if cat2 not in grouped_by_category1_next[cat1]:
+                        grouped_by_category1_next[cat1][cat2] = []
+                    
+                    grouped_by_category1_next[cat1][cat2].append({
+                        "quiz_id": quiz_id,
                         "original_row_index": idx
                     })
-            random.shuffle(session["quiz_order"])
+            
+            sorted_category1_keys_next = []
+            for row in next_questions_data_raw:
+                if len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
+                   row[COL_CATEGORY1].strip() not in sorted_category1_keys_next:
+                    sorted_category1_keys_next.append(row[COL_CATEGORY1].strip())
+            
+            final_quiz_order_next = []
+            for cat1 in sorted_category1_keys_next:
+                if cat1 in grouped_by_category1_next:
+                    category2_keys_next = list(grouped_by_category1_next[cat1].keys())
+                    random.shuffle(category2_keys_next)
+                    
+                    for cat2 in category2_keys_next:
+                        current_group_quizzes_next = grouped_by_category1_next[cat1][cat2]
+                        random.shuffle(current_group_quizzes_next)
+                        final_quiz_order_next.extend(current_group_quizzes_next)
+
+            session["quiz_order"] = final_quiz_order_next # ★修正済み★
             session["current_quiz_index"] = 0 # 次のカテゴリの最初の設問へ
             session["progress_rate"] = 0 # 新しいカテゴリの進捗をリセット
 
@@ -271,7 +311,8 @@ async def get_question(payload: GetQuestionPayload):
             return {
                 "status": "category_end_and_next",
                 "message": f"{current_level}カテゴリが完了しました！次は{next_level}カテゴリに進みます。",
-                "progress_rate": 100 # 直前のカテゴリの完了進捗
+                "progress_rate": 100, # 直前のカテゴリの完了進捗
+                "next_category": next_level # GPTが次に進むべきカテゴリ名を明示的に伝える
             }
         else:
             # 全てのカテゴリが終了した場合
@@ -373,7 +414,7 @@ async def get_category_list(payload: GetCategoryListPayload):
     user_name = payload.user_name
     purpose = payload.purpose
 
-    all_sheet_names = _get_all_category_names() # 現状は固定リスト
+    all_sheet_names = _get_all_category_names() # 修正1で定義された順序
     
     categories = [{"id": name, "name": name} for name in all_sheet_names]
     

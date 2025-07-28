@@ -85,7 +85,7 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
     conversation_example = row_data[COL_CONVERSATION_EXAMPLE] if len(row_data) > COL_CONVERSATION_EXAMPLE else ""
 
     correct_answers = []
-    for col_idx in range(COL_CORRECT_ANSWER1, COL_CORRECT_ANSWER4 + 1):
+    for col_idx in range(COL_CORRECT_ANSWER1, COL_CORRECT_ANSWER4 + 1): # FからI列まで
         if len(row_data) > col_idx and row_data[col_idx].strip():
             correct_answers.append(row_data[col_idx].strip())
 
@@ -94,12 +94,17 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
         if len(row_data) > col_idx and row_data[col_idx].strip():
             dummy_choices.append(row_data[col_idx].strip())
 
-    all_choices_for_display = correct_answers + dummy_choices
-    unique_choices = list(dict.fromkeys(all_choices_for_display))  # 重複を削除
+    # ★★ここから修正★★ 選択肢のシャッフルロジックを改善
+    all_potential_choices = correct_answers + dummy_choices
     
-    print(f"DEBUG: _get_question_from_row - Before shuffle, unique_choices: {unique_choices}")
-    random.shuffle(unique_choices)
-    print(f"DEBUG: _get_question_from_row - After shuffle, unique_choices: {unique_choices}")
+    # 重複を削除しつつ、順序は保たれないため、一旦セットにしてからリストに戻す
+    # ただし、選択肢の順序自体をシャッフルするので、ここでは単に重複を排除する
+    unique_all_choices = list(dict.fromkeys(all_potential_choices)) 
+    
+    print(f"DEBUG: _get_question_from_row - Before final shuffle, unique_all_choices: {unique_all_choices}")
+    random.shuffle(unique_all_choices) # ここで全体をランダムにシャッフル
+    print(f"DEBUG: _get_question_from_row - After final shuffle, unique_all_choices: {unique_all_choices}")
+    # ★★ここまで修正★★
 
     return {
         "category1": category1,
@@ -107,8 +112,8 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
         "question_id": question_id,
         "question_type": question_type,
         "question_content": question_content,
-        "choices": unique_choices, # GPTに渡す選択肢
-        "correct_answers": correct_answers,
+        "choices": unique_all_choices, # GPTに渡す選択肢は完全にシャッフルされたもの
+        "correct_answers": correct_answers, # 正解判定のために正しい答えのリストを返す
         "explanation": explanation,
         "conversation_example": conversation_example,
         "auto_dummy_generation": auto_dummy_flag.upper(),
@@ -117,8 +122,6 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
 
 def _get_all_category_names() -> List[str]:
     """定義されたトレーニングレベルの順序を返す"""
-    # このリストの順序がトレーニングの進行順序となる
-    # GPTsのInstructionsで想定されているレベルの順序に合わせる
     return ["Beginner", "Intermediate", "Advanced", "Drink_recipe"]
 
 
@@ -132,16 +135,15 @@ async def read_root():
 async def get_sheet_data(sheet_name: str = "Beginner"):
     """特定のシートの生データを取得する（デバッグ用）"""
     data = _get_spreadsheet_data(sheet_name)
-    # ヘッダー行を含めて返す
     header_row = spreadsheet.worksheet(sheet_name).row_values(1)
     return {"status": "success", "sheet_name": sheet_name, "header": header_row, "data": data}
 
 
 class StartTrainingPayload(BaseModel):
     user_name: str
-    category: Optional[str] = None # カテゴリ指定がない場合は全体トレーニング
-    start_category_index: Optional[int] = None # デバッグ用: 開始カテゴリ（シート名）のインデックス
-    start_col_category1_value: Optional[str] = None # デバッグ用: 開始したいカテゴリ1の値 (例: "BE02")
+    category: Optional[str] = None
+    start_category_index: Optional[int] = None
+    start_col_category1_value: Optional[str] = None
 
 @app.post("/start_training")
 async def start_training(payload: StartTrainingPayload):
@@ -152,42 +154,38 @@ async def start_training(payload: StartTrainingPayload):
     debug_start_category_idx = payload.start_category_index
     debug_start_col_category1_value = payload.start_col_category1_value
 
-    # ユーザーセッションの初期化またはリセット
     session = {
-        "current_level": None, # 現在のトレーニングレベル（シート名）
-        "quiz_order": [], # そのレベルの出題順序リスト (quiz_idとスプレッドシートの行インデックスのペア)
-        "current_quiz_index": -1, # 現在出題中の設問インデックス
-        "completed_levels": user_sessions.get(user_name, {}).get("completed_levels", []), # 以前の完了レベルは引き継ぐ
+        "current_level": None,
+        "quiz_order": [],
+        "current_quiz_index": -1,
+        "completed_levels": user_sessions.get(user_name, {}).get("completed_levels", []),
         "is_exam_mode": False,
         "exam_score": 0,
         "total_exam_questions": 0,
-        "exam_quiz_order": [], # 試験モード用
-        "current_exam_quiz_index": -1 # 試験モード用
+        "exam_quiz_order": [],
+        "current_exam_quiz_index": -1
     }
 
-    all_levels = _get_all_category_names() # シート名リスト
+    all_levels = _get_all_category_names()
     if not all_levels:
         raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
 
-    # デバッグ用インデックスが指定されている場合の処理 (シート名で飛ぶ)
     if debug_start_category_idx is not None and 0 <= debug_start_category_idx < len(all_levels):
         level_to_start = all_levels[debug_start_category_idx]
         print(f"DEBUG: Starting from category index {debug_start_category_idx} ({level_to_start})")
-    elif target_category: # 特定のカテゴリ（シート名）からの開始/復習
-        if target_category not in all_levels: # 指定されたカテゴリが存在しない場合
+    elif target_category:
+        if target_category not in all_levels:
             raise HTTPException(status_code=404, detail=f"指定されたカテゴリ「{target_category}」が見つかりません。利用可能なカテゴリ: {all_levels}")
         level_to_start = target_category
-    else: # カテゴリ指定なしの場合 (一番最初のカテゴリから開始)
-        level_to_start = all_levels[0] # 定義された順序の最初のシート
+    else:
+        level_to_start = all_levels[0]
     
-    # 指定されたレベルの設問データを読み込み
     questions_data_raw = _get_spreadsheet_data(level_to_start)
     if not questions_data_raw:
         raise HTTPException(status_code=404, detail=f"選択されたカテゴリ/レベル「{level_to_start}」に設問がありません。")
 
     session["current_level"] = level_to_start
     
-    # カテゴリ1とカテゴリ2でグループ化し、最終的な出題順序を生成
     grouped_by_category1: Dict[str, Dict[str, List[Dict]]] = {}
     ordered_category2_keys_by_cat1: Dict[str, List[str]] = {}
 
@@ -211,7 +209,7 @@ async def start_training(payload: StartTrainingPayload):
             grouped_by_category1[cat1][cat2].append({
                 "quiz_id": quiz_id,
                 "original_row_index": idx,
-                "category1_value": cat1 # <- ここでcategory1の値を保存
+                "category1_value": cat1
             })
 
     sorted_category1_keys = []
@@ -230,19 +228,17 @@ async def start_training(payload: StartTrainingPayload):
                 final_quiz_order.extend(current_group_quizzes)
 
     session["quiz_order"] = final_quiz_order
-    session["current_quiz_index"] = -1 # デフォルトは最初の問題の前に設定 (get_questionで+1されるため)
+    session["current_quiz_index"] = -1
 
-    # カテゴリ1の値が指定されている場合の処理 (BE01, BE02, BE03などに飛ぶ)
     if debug_start_col_category1_value:
         found_index = -1
         for i, quiz_info in enumerate(final_quiz_order):
-            # quiz_infoに保存されているcategory1_valueを使用
             if quiz_info.get("category1_value") == debug_start_col_category1_value:
                 found_index = i
                 break
         
         if found_index != -1:
-            session["current_quiz_index"] = found_index - 1 # get_questionで+1されるため
+            session["current_quiz_index"] = found_index - 1
             print(f"DEBUG: Starting from COL_CATEGORY1 '{debug_start_col_category1_value}' at quiz order index {found_index}")
         else:
             print(f"WARNING: COL_CATEGORY1 '{debug_start_col_category1_value}' not found in current level. Starting from beginning.")
@@ -263,18 +259,16 @@ async def get_question(payload: GetQuestionPayload):
     user_name = payload.user_name
     session = user_sessions.get(user_name)
 
-    if not session or session.get("is_exam_mode"): # 試験モード中は通常のget_questionは許可しない
+    if not session or session.get("is_exam_mode"):
         raise HTTPException(status_code=400, detail="有効なトレーニングセッションがありません。または試験モード中です。")
 
     current_level = session["current_level"]
     quiz_order = session["quiz_order"]
     current_quiz_index = session["current_quiz_index"]
 
-    session["current_quiz_index"] += 1 # 次の設問へ進む
+    session["current_quiz_index"] += 1
 
-    # カテゴリ内のすべての設問が完了した場合の処理
     if session["current_quiz_index"] >= len(quiz_order):
-        # 現在のカテゴリを完了済みにマーク (重複は避ける)
         if current_level and current_level not in session["completed_levels"]:
             session["completed_levels"].append(current_level)
 
@@ -282,17 +276,14 @@ async def get_question(payload: GetQuestionPayload):
         current_level_idx = all_levels.index(current_level) if current_level in all_levels else -1
 
         if current_level_idx < len(all_levels) - 1:
-            # 次のカテゴリがある場合
             next_level = all_levels[current_level_idx + 1]
             
-            # 次のレベルの設問データを読み込み
             next_questions_data_raw = _get_spreadsheet_data(next_level)
             if not next_questions_data_raw:
                 raise HTTPException(status_code=404, detail=f"次のカテゴリ「{next_level}」には設問がありません。")
 
             session["current_level"] = next_level
             
-            # 次のカテゴリの quiz_order 生成にも修正済みシャッフルロジックを適用
             grouped_by_category1_next: Dict[str, Dict[str, List[Dict]]] = {}
             ordered_category2_keys_by_cat1_next: Dict[str, List[str]] = {} 
 
@@ -315,7 +306,7 @@ async def get_question(payload: GetQuestionPayload):
                     grouped_by_category1_next[cat1][cat2].append({
                         "quiz_id": quiz_id,
                         "original_row_index": idx,
-                        "category1_value": cat1 # <- ここでcategory1の値を保存
+                        "category1_value": cat1
                     })
             
             sorted_category1_keys_next = []
@@ -334,8 +325,8 @@ async def get_question(payload: GetQuestionPayload):
                         final_quiz_order_next.extend(current_group_quizzes_next)
 
             session["quiz_order"] = final_quiz_order_next
-            session["current_quiz_index"] = 0 # 次のカテゴリの最初の設問へ
-            session["progress_rate"] = 0 # 新しいカテゴリの進捗をリセット
+            session["current_quiz_index"] = 0
+            session["progress_rate"] = 0
 
             user_sessions[user_name] = session
             return {
@@ -345,7 +336,6 @@ async def get_question(payload: GetQuestionPayload):
                 "next_category": next_level
             }
         else:
-            # 全てのカテゴリが終了した場合
             session["progress_rate"] = 100
             user_sessions[user_name] = session
             return {
@@ -354,18 +344,15 @@ async def get_question(payload: GetQuestionPayload):
                 "progress_rate": 100
             }
     
-    # 通常の設問取得
     current_quiz_info = quiz_order[session["current_quiz_index"]]
     current_quiz_id = current_quiz_info["quiz_id"]
     original_row_index = current_quiz_info["original_row_index"]
 
-    # スプレッドシートから生の行データを再取得
     all_questions_for_level = _get_spreadsheet_data(current_level)
     current_row_data = all_questions_for_level[original_row_index]
 
     question_object = _get_question_from_row(current_row_data)
     
-    # 進捗率の計算
     total_questions_in_level = len(quiz_order)
     progress_rate = 0
     if total_questions_in_level > 0:
@@ -413,9 +400,9 @@ async def submit_answer(payload: SubmitAnswerPayload):
     all_questions_for_level = _get_spreadsheet_data(current_level)
     current_row_data = all_questions_for_level[current_quiz_info["original_row_index"]]
 
-    # 正解のリストを取得 (空でないものを格納)
+    # ★★ここを修正★★ 複数の正解を全て取得し、いずれか一つと合致すれば正解
     correct_answers = []
-    for col_idx in range(COL_CORRECT_ANSWER1, COL_CORRECT_ANSWER4 + 1):
+    for col_idx in range(COL_CORRECT_ANSWER1, COL_CORRECT_ANSWER4 + 1): # FからI列まで
         if len(current_row_data) > col_idx and current_row_data[col_idx].strip():
             correct_answers.append(current_row_data[col_idx].strip())
 

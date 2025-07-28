@@ -165,10 +165,10 @@ async def start_training(payload: StartTrainingPayload):
     if target_category: # 特定のカテゴリからの開始/復習
         level_to_start = target_category # GPTsのInstructionsではシート名がレベル
     else: # カテゴリ指定なしの場合 (一番最初のカテゴリから開始)
-        all_levels = _get_all_category_names() # シート名リスト (修正1で定義された順序)
+        all_levels = _get_all_category_names() # シート名リスト
         if not all_levels:
             raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
-        level_to_start = all_levels[0] # アルファベット順ソートではなく、定義された順序の最初のシート
+        level_to_start = all_levels[0] # 定義された順序の最初のシート
     
     # 指定されたレベルの設問データを読み込み
     questions_data_raw = _get_spreadsheet_data(level_to_start)
@@ -177,9 +177,12 @@ async def start_training(payload: StartTrainingPayload):
 
     session["current_level"] = level_to_start
     
-    # ★★★ ここからシャッフルロジックの変更（修正2）★★★
-    # カテゴリ1でグループ化し、カテゴリ2をシャッフル
+    # ★★★ ここからシャッフルロジックの修正済み部分 ★★★
+    # カテゴリ1とカテゴリ2でグループ化
     grouped_by_category1: Dict[str, Dict[str, List[Dict]]] = {}
+    # カテゴリ2の順序を保持するためのリスト (スプレッドシートの出現順)
+    ordered_category2_keys_by_cat1: Dict[str, List[str]] = {}
+
     for idx, row in enumerate(questions_data_raw):
         # 必須カラムが存在するかチェック
         if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip() and \
@@ -192,8 +195,11 @@ async def start_training(payload: StartTrainingPayload):
             
             if cat1 not in grouped_by_category1:
                 grouped_by_category1[cat1] = {}
+                ordered_category2_keys_by_cat1[cat1] = [] # 新しいカテゴリ1に対してカテゴリ2の順序リストを初期化
+            
             if cat2 not in grouped_by_category1[cat1]:
                 grouped_by_category1[cat1][cat2] = []
+                ordered_category2_keys_by_cat1[cat1].append(cat2) # カテゴリ2の出現順を記録
             
             grouped_by_category1[cat1][cat2].append({
                 "quiz_id": quiz_id,
@@ -201,7 +207,6 @@ async def start_training(payload: StartTrainingPayload):
             })
 
     # カテゴリ1のキーを抽出して、元のスプレッドシートの順序を維持
-    # (COL_CATEGORY1でソートされていると仮定し、重複を除いて順序を保持)
     sorted_category1_keys = []
     for row in questions_data_raw:
         if len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
@@ -211,20 +216,22 @@ async def start_training(payload: StartTrainingPayload):
     final_quiz_order = []
     for cat1 in sorted_category1_keys: # カテゴリ1は順序を維持
         if cat1 in grouped_by_category1:
-            category2_keys = list(grouped_by_category1[cat1].keys())
-            random.shuffle(category2_keys) # カテゴリ2をシャッフル
+            # カテゴリ2のキーをシャッフルせず、スプレッドシートの出現順を使用
+            category2_keys = ordered_category2_keys_by_cat1.get(cat1, [])
+            # random.shuffle(category2_keys) # この行を削除/コメントアウト (以前シャッフルしていた箇所)
             
-            for cat2 in category2_keys: # シャッフルされたカテゴリ2の順に
-                # 各カテゴリ2内の設問もシャッフル (任意: 今回は含めます)
+            for cat2 in category2_keys: # スプレッドシート順のカテゴリ2の順に
+                # 各カテゴリ2内の設問はシャッフル (変更なし)
                 current_group_quizzes = grouped_by_category1[cat1][cat2]
-                random.shuffle(current_group_quizzes) # 小項目内もシャッフル
+                random.shuffle(current_group_quizzes)
                 final_quiz_order.extend(current_group_quizzes)
 
     session["quiz_order"] = final_quiz_order
     session["current_quiz_index"] = -1 # 最初の問題の前に設定
 
     user_sessions[user_name] = session
-    print(f"User {user_name} session started/reset for level: {level_to_start}. Quiz order generated based on Category1 & Category2 shuffle.")
+    print(f"User {user_name} session started/reset for level: {level_to_start}. Quiz order generated based on Category1 & Category2 fixed order, and internal shuffle.")
+    print(f"DEBUG: final_quiz_order: {final_quiz_order}") # デバッグログ追加
     
     return {"status": "success", "message": f"トレーニングを開始します。現在のカテゴリ: {level_to_start}"}
 
@@ -269,8 +276,10 @@ async def get_question(payload: GetQuestionPayload):
 
             session["current_level"] = next_level
             
-            # ★★★ 次のカテゴリの quiz_order 生成にもシャッフルロジックを適用 ★★★
+            # ★★★ 次のカテゴリの quiz_order 生成にも修正済みシャッフルロジックを適用 ★★★
             grouped_by_category1_next: Dict[str, Dict[str, List[Dict]]] = {}
+            ordered_category2_keys_by_cat1_next: Dict[str, List[str]] = {} 
+
             for idx, row in enumerate(next_questions_data_raw):
                 if len(row) > COL_QUIZ_ID and row[COL_QUIZ_ID].strip() and \
                    len(row) > COL_CATEGORY1 and row[COL_CATEGORY1].strip() and \
@@ -282,8 +291,10 @@ async def get_question(payload: GetQuestionPayload):
                     
                     if cat1 not in grouped_by_category1_next:
                         grouped_by_category1_next[cat1] = {}
+                        ordered_category2_keys_by_cat1_next[cat1] = [] 
                     if cat2 not in grouped_by_category1_next[cat1]:
                         grouped_by_category1_next[cat1][cat2] = []
+                        ordered_category2_keys_by_cat1_next[cat1].append(cat2) 
                     
                     grouped_by_category1_next[cat1][cat2].append({
                         "quiz_id": quiz_id,
@@ -299,8 +310,9 @@ async def get_question(payload: GetQuestionPayload):
             final_quiz_order_next = []
             for cat1 in sorted_category1_keys_next:
                 if cat1 in grouped_by_category1_next:
-                    category2_keys_next = list(grouped_by_category1_next[cat1].keys())
-                    random.shuffle(category2_keys_next)
+                    # カテゴリ2のキーをシャッフルせず、スプレッドシートの出現順を使用
+                    category2_keys_next = ordered_category2_keys_by_cat1_next.get(cat1, [])
+                    # random.shuffle(category2_keys_next) # この行を削除/コメントアウト
                     
                     for cat2 in category2_keys_next:
                         current_group_quizzes_next = grouped_by_category1_next[cat1][cat2]
@@ -420,41 +432,4 @@ async def get_category_list(payload: GetCategoryListPayload):
     
     categories = [{"id": name, "name": name} for name in all_sheet_names]
     
-    if purpose == "review":
-        session = user_sessions.get(user_name)
-        if not session or not session.get("completed_levels"):
-            return {"status": "success", "categories": [], "message": "現在、復習可能なカテゴリはありません。"}
-        
-        completed_levels = session["completed_levels"]
-        # 現在進行中のカテゴリも復習対象に含める（ただし既に完了済みでなければ）
-        if session.get("current_level") and session["current_level"] not in completed_levels:
-             completed_levels.append(session["current_level"])
-        
-        categories = [cat for cat in categories if cat["id"] in completed_levels]
-        
-        if not categories:
-            return {"status": "success", "categories": [], "message": "現在、復習可能なカテゴリはありません。"}
-
-    return {"status": "success", "categories": categories}
-
-
-class ResetTrainingPayload(BaseModel):
-    user_name: str
-
-@app.post("/reset_training")
-async def reset_training(payload: ResetTrainingPayload):
-    """ユーザーのトレーニングセッションをリセットする"""
-    user_name = payload.user_name
-    if user_name in user_sessions:
-        del user_sessions[user_name]
-        print(f"User {user_name} session reset.")
-    return {"status": "success", "message": "トレーニングセッションがリセットされました。"}
-
-# --- 試験モード関連のエンドポイントは今後の実装 ---
-# @app.post("/start_exam")
-# async def start_exam(payload: StartExamPayload):
-#     pass
-
-# @app.post("/submit_exam_answer")
-# async def submit_exam_answer(payload: SubmitExamAnswerPayload):
-#     pass
+    if purpose

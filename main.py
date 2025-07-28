@@ -95,7 +95,7 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
             dummy_choices.append(row_data[col_idx].strip())
 
     all_choices_for_display = correct_answers + dummy_choices
-    unique_choices = list(dict.fromkeys(all_choices_for_display)) 
+    unique_choices = list(dict.fromkeys(all_choices_for_display))  # 重複を削除
     
     # ここで選択肢をシャッフルしています
     print(f"DEBUG: _get_question_from_row - Before shuffle, unique_choices: {unique_choices}")
@@ -141,6 +141,7 @@ async def get_sheet_data(sheet_name: str = "Beginner"):
 class StartTrainingPayload(BaseModel):
     user_name: str
     category: Optional[str] = None # カテゴリ指定がない場合は全体トレーニング
+    start_category_index: Optional[int] = None # デバッグ用: 開始カテゴリのインデックス
 
 @app.post("/start_training")
 async def start_training(payload: StartTrainingPayload):
@@ -148,6 +149,8 @@ async def start_training(payload: StartTrainingPayload):
     user_name = payload.user_name
     target_category = payload.category
     
+    debug_start_category_idx = payload.start_category_index # これを使用
+
     # ユーザーセッションの初期化またはリセット
     session = {
         "current_level": None, # 現在のトレーニングレベル（シート名）
@@ -161,13 +164,19 @@ async def start_training(payload: StartTrainingPayload):
         "current_exam_quiz_index": -1 # 試験モード用
     }
 
-    # トレーニング開始ロジック
-    if target_category: # 特定のカテゴリからの開始/復習
-        level_to_start = target_category # GPTsのInstructionsではシート名がレベル
+    all_levels = _get_all_category_names() # シート名リスト
+    if not all_levels:
+        raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
+
+    # デバッグ用インデックスが指定されている場合の処理
+    if debug_start_category_idx is not None and 0 <= debug_start_category_idx < len(all_levels):
+        level_to_start = all_levels[debug_start_category_idx]
+        print(f"DEBUG: Starting from category index {debug_start_category_idx} ({level_to_start})")
+    elif target_category: # 特定のカテゴリからの開始/復習
+        if target_category not in all_levels: # 指定されたカテゴリが存在しない場合
+            raise HTTPException(status_code=404, detail=f"指定されたカテゴリ「{target_category}」が見つかりません。利用可能なカテゴリ: {all_levels}")
+        level_to_start = target_category
     else: # カテゴリ指定なしの場合 (一番最初のカテゴリから開始)
-        all_levels = _get_all_category_names() # シート名リスト
-        if not all_levels:
-            raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
         level_to_start = all_levels[0] # 定義された順序の最初のシート
     
     # 指定されたレベルの設問データを読み込み
@@ -227,7 +236,8 @@ async def start_training(payload: StartTrainingPayload):
                 final_quiz_order.extend(current_group_quizzes)
 
     session["quiz_order"] = final_quiz_order
-    session["current_quiz_index"] = -1 # 最初の問題の前に設定
+    # カテゴリの最初から始めるため、常に-1（get_questionで+1される）
+    session["current_quiz_index"] = -1 
 
     user_sessions[user_name] = session
     print(f"User {user_name} session started/reset for level: {level_to_start}. Quiz order generated based on Category1 & Category2 fixed order, and internal shuffle.")

@@ -12,7 +12,7 @@ app = FastAPI()
 # Google Sheets 認証情報を環境変数から読み込む
 gc = None
 # ★★ 重要: あなたのスプレッドシートIDに置き換えてください ★★
-SPREADSHEET_ID = "1ZriaRf5UAzzz8q4biKcfr0MxCkOkzf33GyQLCEKngnA" # あなたのスプレッドシートID
+SPREADSHEET_ID = "1ZriaRf5UAzzz8q2biKcfr0MxCkOkzf33GyQLCEKngnA" # あなたのスプレッドシートID
 
 try:
     base64_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_BASE64")
@@ -345,7 +345,7 @@ async def get_question(payload: GetQuestionPayload):
     current_quiz_id = current_quiz_info["quiz_id"]
     original_row_index = current_quiz_info["original_row_index"]
 
-    # スプレッドシートから生の行データを再取得（毎回シートから読むのは非効率だが、インメモリではこれが確実）
+    # スプレッドシートから生の行データを再取得（毎回シートから読むのは非効率だが、これが確実）
     all_questions_for_level = _get_spreadsheet_data(current_level)
     current_row_data = all_questions_for_level[original_row_index]
 
@@ -432,4 +432,43 @@ async def get_category_list(payload: GetCategoryListPayload):
     
     categories = [{"id": name, "name": name} for name in all_sheet_names]
     
-    if purpose
+    # ここが今回のエラー原因箇所（`if purpose` となっていた可能性）
+    # 正しい構文 `if purpose == "review":` を再度明確に示します。
+    if purpose == "review": 
+        session = user_sessions.get(user_name)
+        if not session or not session.get("completed_levels"):
+            return {"status": "success", "categories": [], "message": "現在、復習可能なカテゴリはありません。"}
+        
+        completed_levels = session["completed_levels"]
+        # 現在進行中のカテゴリも復習対象に含める（ただし既に完了済みでなければ）
+        if session.get("current_level") and session["current_level"] not in completed_levels:
+             completed_levels.append(session["current_level"])
+        
+        categories = [cat for cat in categories if cat["id"] in completed_levels]
+        
+        if not categories:
+            return {"status": "success", "categories": [], "message": "現在、復習可能なカテゴリはありません。"}
+
+    return {"status": "success", "categories": categories}
+
+
+class ResetTrainingPayload(BaseModel):
+    user_name: str
+
+@app.post("/reset_training")
+async def reset_training(payload: ResetTrainingPayload):
+    """ユーザーのトレーニングセッションをリセットする"""
+    user_name = payload.user_name
+    if user_name in user_sessions:
+        del user_sessions[user_name]
+        print(f"User {user_name} session reset.")
+    return {"status": "success", "message": "トレーニングセッションがリセットされました。"}
+
+# --- 試験モード関連のエンドポイントは今後の実装 ---
+# @app.post("/start_exam")
+# async def start_exam(payload: StartExamPayload):
+#     pass
+
+# @app.post("/submit_exam_answer")
+# async def submit_exam_answer(payload: SubmitExamAnswerPayload):
+#     pass

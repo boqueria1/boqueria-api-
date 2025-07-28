@@ -12,7 +12,7 @@ app = FastAPI()
 # Google Sheets 認証情報を環境変数から読み込む
 gc = None
 # ★★ 重要: あなたのスプレッドシートIDに置き換えてください ★★
-SPREADSHEET_ID = "1ZriaRf5UAzzz8q2biKcfr0MxCkOkzf33GyQLCEKngnA" # あなたのスプレッドシートID
+SPREADSHEET_ID = "1ZriaRf5UAzzz8q4biKcfr0MxCkOkzf33GyQLCEKngnA" # あなたのスプレッドシートID
 
 try:
     base64_credentials = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_BASE64")

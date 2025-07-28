@@ -96,7 +96,11 @@ def _get_question_from_row(row_data: List[str]) -> Dict[str, Union[str, List[str
 
     all_choices_for_display = correct_answers + dummy_choices
     unique_choices = list(dict.fromkeys(all_choices_for_display)) 
-    random.shuffle(unique_choices) # 選択肢のシャッフル
+    
+    # ここで選択肢をシャッフルしています
+    print(f"DEBUG: _get_question_from_row - Before shuffle, unique_choices: {unique_choices}")
+    random.shuffle(unique_choices)
+    print(f"DEBUG: _get_question_from_row - After shuffle, unique_choices: {unique_choices}")
 
     return {
         "category1": category1,
@@ -116,7 +120,7 @@ def _get_all_category_names() -> List[str]:
     """定義されたトレーニングレベルの順序を返す"""
     # このリストの順序がトレーニングの進行順序となる
     # GPTsのInstructionsで想定されているレベルの順序に合わせる
-    return ["Beginner", "Intermediate", "Advanced", "Drink_recipe"] # ★修正済み★
+    return ["Beginner", "Intermediate", "Advanced", "Drink_recipe"]
 
 
 # --- FastAPI エンドポイント ---
@@ -164,7 +168,7 @@ async def start_training(payload: StartTrainingPayload):
         all_levels = _get_all_category_names() # シート名リスト (修正1で定義された順序)
         if not all_levels:
             raise HTTPException(status_code=500, detail="利用可能なクイズレベルが見つかりません。")
-        level_to_start = all_levels[0] # ★修正済み★ アルファベット順ソートではなく、定義された順序の最初のシート
+        level_to_start = all_levels[0] # アルファベット順ソートではなく、定義された順序の最初のシート
     
     # 指定されたレベルの設問データを読み込み
     questions_data_raw = _get_spreadsheet_data(level_to_start)
@@ -216,7 +220,7 @@ async def start_training(payload: StartTrainingPayload):
                 random.shuffle(current_group_quizzes) # 小項目内もシャッフル
                 final_quiz_order.extend(current_group_quizzes)
 
-    session["quiz_order"] = final_quiz_order # ★修正済み★
+    session["quiz_order"] = final_quiz_order
     session["current_quiz_index"] = -1 # 最初の問題の前に設定
 
     user_sessions[user_name] = session
@@ -249,12 +253,12 @@ async def get_question(payload: GetQuestionPayload):
         if current_level and current_level not in session["completed_levels"]:
             session["completed_levels"].append(current_level)
 
-        all_levels = _get_all_category_names() # ★修正3: sorted() を削除★
+        all_levels = _get_all_category_names()
         current_level_idx = all_levels.index(current_level) if current_level in all_levels else -1
 
-        if current_level_idx < len(all_levels) - 1: # ★修正3: len(all_levels_sorted) を len(all_levels) に変更★
+        if current_level_idx < len(all_levels) - 1:
             # 次のカテゴリがある場合
-            next_level = all_levels[current_level_idx + 1] # ★修正3: all_levels_sorted を all_levels に変更★
+            next_level = all_levels[current_level_idx + 1]
             
             # 次のレベルの設問データを読み込み
             next_questions_data_raw = _get_spreadsheet_data(next_level)
@@ -303,14 +307,14 @@ async def get_question(payload: GetQuestionPayload):
                         random.shuffle(current_group_quizzes_next)
                         final_quiz_order_next.extend(current_group_quizzes_next)
 
-            session["quiz_order"] = final_quiz_order_next # ★修正済み★
+            session["quiz_order"] = final_quiz_order_next
             session["current_quiz_index"] = 0 # 次のカテゴリの最初の設問へ
             session["progress_rate"] = 0 # 新しいカテゴリの進捗をリセット
 
             user_sessions[user_name] = session
             return {
                 "status": "category_end_and_next",
-                "message": f"{current_level}カテゴリが完了しました！次は{next_level}カテゴリに進みます。",
+                "message": f"{current_level}カテゴリが完了しました！次は{next_level}カテゴリに進みます。", # ここではシート名を表示するが、GPTsがInternal Category1として解釈するようにInstructionで制御
                 "progress_rate": 100, # 直前のカテゴリの完了進捗
                 "next_category": next_level # GPTが次に進むべきカテゴリ名を明示的に伝える
             }
@@ -394,8 +398,6 @@ async def submit_answer(payload: SubmitAnswerPayload):
     
     explanation = current_row_data[COL_EXPLANATION] if len(current_row_data) > COL_EXPLANATION else ""
 
-    # セッションの進捗率は get_question で更新されるので、ここでは更新しない（GASのsubmitAnswerも同様）
-
     return {
         "status": "answer_result",
         "is_correct": is_correct,
@@ -414,7 +416,7 @@ async def get_category_list(payload: GetCategoryListPayload):
     user_name = payload.user_name
     purpose = payload.purpose
 
-    all_sheet_names = _get_all_category_names() # 修正1で定義された順序
+    all_sheet_names = _get_all_category_names()
     
     categories = [{"id": name, "name": name} for name in all_sheet_names]
     
